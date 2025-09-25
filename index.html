@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WWWFC - Welcome</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, #001f5c 0%, #000000 40%, #004699 70%, #001f5c 100%);
+            font-family: 'Bebas Neue', sans-serif;
+            font-weight: bold;
+            overflow: hidden;
+            position: relative;
+            animation: backgroundZoom 40s infinite alternate ease-in-out;
+            margin-left: 200px; /* Add space for nav */
+        }
+
+        @keyframes backgroundZoom {
+            0% { background-size: 100% 100%; background-position: 0% 0%; }
+            50% { background-size: 130% 130%; background-position: 30% 30%; }
+            100% { background-size: 120% 120%; background-position: 10% 10%; }
+        }
+
+        .light-sweep {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+            animation: sweep 2.5s infinite linear;
+            transform: skewX(-20deg);
+            filter: blur(5px);
+        }
+
+        .light-sweep-2 {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0,255,255,0.1), transparent);
+            animation: sweep 4s infinite linear;
+            transform: skewX(-20deg);
+        }
+
+        .light-sweep-3 {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,140,0,0.1), transparent);
+            animation: sweep 3.5s infinite linear;
+            transform: skewX(-20deg);
+        }
+
+        @keyframes sweep {
+            0% { transform: translateX(-100%) skewX(-20deg); }
+            100% { transform: translateX(200%) skewX(-20deg); }
+        }
+
+        .content {
+            text-align: center;
+            color: white;
+            z-index: 1;
+            animation: pulse 2s ease-in-out infinite;
+            padding: 2rem;
+            background: rgba(0, 10, 30, 0.4);
+            box-shadow: 
+                0 0 50px rgba(0, 255, 255, 0.2),
+                0 0 100px rgba(0, 255, 255, 0.1),
+                inset 0 0 30px rgba(0, 255, 255, 0.1);
+            border: 1px solid rgba(0, 255, 255, 0.2);
+            border-radius: 15px;
+            animation: 
+                pulse 2s ease-in-out infinite,
+                borderGlow 3s linear infinite;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            transform-style: initial;
+            backdrop-filter: blur(15px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .content::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+            animation: reflectionMove 8s infinite linear;
+        }
+
+        @keyframes reflectionMove {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+
+        .content:hover {
+            transform: scale(1.05) translateY(-5px);
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
+        }
+
+        .particles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 0;
+        }
+
+        .particle {
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            background: cyan;
+            border-radius: 50%;
+            animation: particleFall 15s infinite linear, particleGlow 2s infinite alternate;
+            filter: blur(1px);
+            box-shadow: 
+                0 0 15px currentColor,
+                0 0 30px currentColor;
+            opacity: 0.7;
+            transform-style: initial;
+        }
+
+        @keyframes particleGlow {
+            0% { filter: blur(1px) brightness(1); }
+            100% { filter: blur(2px) brightness(1.5); }
+        }
+
+        .particle:nth-child(2n) {
+            background: linear-gradient(45deg, cyan, blue);
+        }
+
+        .particle:nth-child(3n) {
+            width: 4px;
+            height: 4px;
+            color: #4ff4ff;
+        }
+
+        .particle:nth-child(3n+1) {
+            width: 2px;
+            height: 2px;
+            color: #0088ff;
+        }
+
+        h1 {
+            font-size: 5rem;
+            margin: 0;
+            letter-spacing: 3px;
+            background: linear-gradient(
+                to right,
+                #00ffff 0%,
+                #ffffff 20%,
+                #4ff4ff 40%,
+                #ffffff 60%,
+                #00ffff 80%,
+                #4ff4ff 100%
+            );
+            background-size: 200% auto;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+            animation: 
+                shine 2s linear infinite,
+                shimmer 2s infinite,
+                float 4s ease-in-out infinite;
+            text-shadow: none;
+            filter: drop-shadow(0 0 20px rgba(0,255,255,0.4)) brightness(1.2);
+            text-transform: uppercase;
+            position: relative;
+        }
+
+        h1::after {
+            content: attr(data-text);
+            position: absolute;
+            left: 0;
+            top: 0;
+            z-index: -1;
+            filter: blur(15px);
+            opacity: 0.5;
+            color: cyan;
+        }
+
+        p {
+            font-size: 2rem;
+            margin: 1rem 0;
+            opacity: 0.8;
+            background: linear-gradient(
+                to right,
+                rgb(162, 255, 255) 20%,
+                white 50%,
+                rgb(88, 255, 255) 80%
+            );
+            background-size: 200% auto;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+            animation: shine 5s linear infinite;
+            text-shadow: none;
+            filter: drop-shadow(0 0 8px rgba(0,255,255,0.3));
+        }
+
+        @keyframes shine {
+            to {
+                background-position: 200% center;
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+
+        @keyframes borderGlow {
+            0% { border-color: cyan; }
+            33% { border-color: #4ff4ff; }
+            66% { border-color: #0088ff; }
+            100% { border-color: cyan; }
+        }
+
+        @keyframes shimmer {
+            0% { filter: drop-shadow(0 0 20px rgba(0,255,255,0.3)) brightness(1); }
+            50% { filter: drop-shadow(0 0 30px rgba(0,255,255,0.6)) brightness(1.3); }
+            100% { filter: drop-shadow(0 0 20px rgba(0,255,255,0.3)) brightness(1); }
+        }
+
+        @keyframes particleFall {
+            from { transform: translateY(-100vh) rotate(0deg); }
+            to { transform: translateY(100vh) rotate(360deg); }
+        }
+
+        .lightning {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 2;
+            opacity: 0;
+            animation: lightning 10s infinite;
+        }
+
+        @keyframes lightning {
+            0%, 95%, 98% { opacity: 0; }
+            96%, 99% { opacity: 0.8; background: white; }
+        }
+
+        .star {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: white;
+            animation: twinkle 3s infinite;
+            box-shadow: 
+                0 0 4px white,
+                0 0 8px rgba(0, 255, 255, 0.8);
+            filter: blur(1px);
+        }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.2; }
+            50% { opacity: 1; transform: scale(1.5); }
+        }
+
+        .rain {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(transparent, rgba(0,255,255,0.2));
+            animation: rain 1s linear infinite;
+            opacity: 0.1;
+        }
+
+        @keyframes rain {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+
+        .nav-menu {
+            position: fixed;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 200px;
+            background: rgba(0, 15, 40, 0.7);
+            border-right: 1px solid rgba(0, 255, 255, 0.15);
+            box-shadow: 5px 0 30px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(15px);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 100;
+        }
+
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            font-size: 1.5rem;
+            padding: 10px;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            background: linear-gradient(135deg, rgba(0, 30, 60, 0.4), rgba(0, 15, 40, 0.6));
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            box-shadow: inset 0 1px rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-link:hover {
+            border-color: cyan;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+            transform: translateX(5px);
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav-menu">
+        <a href="radar.html" class="nav-link">Radar</a>
+        <a href="confidence.html" class="nav-link">Confidence Outlook</a>
+    </nav>
+    <div class="lightning"></div>
+    <div class="particles">
+        <div class="particle" style="left: 20%; animation-delay: 0s;"></div>
+        <div class="particle" style="left: 40%; animation-delay: 2s;"></div>
+        <div class="particle" style="left: 60%; animation-delay: 4s;"></div>
+        <div class="particle" style="left: 80%; animation-delay: 6s;"></div>
+        <div class="particle" style="left: 30%; animation-delay: 8s;"></div>
+        <div class="particle" style="left: 70%; animation-delay: 10s;"></div>
+        <div class="particle" style="left: 15%; animation-delay: 12s;"></div>
+        <div class="particle" style="left: 85%; animation-delay: 14s;"></div>
+        <div class="particle" style="left: 45%; animation-delay: 16s;"></div>
+    </div>
+    <div class="rain"></div>
+    <script>
+        // Add dynamic stars
+        function createStars() {
+            const container = document.body;
+            for(let i = 0; i < 50; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                star.style.left = Math.random() * 100 + '%';
+                star.style.top = Math.random() * 100 + '%';
+                star.style.animationDelay = Math.random() * 3 + 's';
+                container.appendChild(star);
+            }
+        }
+
+        function createParticles() {
+            const container = document.querySelector('.particles');
+            for(let i = 0; i < 20; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.animationDelay = Math.random() * 15 + 's';
+                particle.style.backgroundColor = `hsl(${180 + Math.random() * 60}, 100%, 70%)`;
+                container.appendChild(particle);
+            }
+        }
+        createStars();
+        createParticles();
+    </script>
+    <div class="light-sweep-3"></div>
+    <div class="light-sweep-2"></div>
+    <div class="light-sweep"></div>
+    <div class="content">
+        <h1 data-text="WELCOME TO WWWFC">WELCOME TO WWWFC</h1>
+        <p>Westin's Weather Wise Forecast Center</p>
+    </div>
+</body>
+</html>
