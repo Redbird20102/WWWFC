@@ -2,9 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>MapTiler Map Example</title>
-  <!-- MapLibre GL JS CSS -->
-  <link href="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Grey – MapTiler Cloud</title>
+  <!-- MapTiler SDK CSS -->
+  <link href="https://cdn.maptiler.com/maptiler-sdk-js/v3.8.0/maptiler-sdk.css" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css?family=Bebas+Neue:400,700&display=swap" rel="stylesheet">
   <style>
     html, body,
@@ -28,8 +29,11 @@
       border-radius: 0;
     }
     #map {
-      width: 100vw;
-      height: 100vh;
+      position:absolute;
+      top:0;
+      bottom:0;
+      width:100vw;
+      height:100vh;
       border: none;
       border-radius: 0;
       box-shadow: none;
@@ -422,18 +426,29 @@
     <!-- Color pickers will be added here by JavaScript -->
   </div>
 
-  <!-- MapLibre GL JS -->
-  <script src="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.js"></script>
+  <!-- Add MapTiler SDK JS -->
+  <script src="https://cdn.maptiler.com/maptiler-sdk-js/v3.8.0/maptiler-sdk.umd.min.js"></script>
   <script>
-    const map = new maplibregl.Map({
+    // MapTiler SDK initialization
+    maptilersdk.config.apiKey = 'CmQHmGrZ2Xo39Iqx78BO';
+    var map = new maptilersdk.Map({
       container: 'map',
-      style: 'https://api.maptiler.com/maps/01977485-3327-711a-8309-09c8d9dcc02b/style.json?key=CmQHmGrZ2Xo39Iqx78BO',
+      style: '01977485-3327-711a-8309-09c8d9dcc02b',
+      hash: true,
+      maptilerLogo: true,
+      maxPitch: 85,
+      language: maptilersdk.Language.STYLE_LOCK,
       center: [-98.5795, 39.8283], // Centered on USA
       zoom: 4
     });
 
+    // --- Patch: Replace maplibregl usage with maptilersdk where needed ---
+    // For all maplibregl usages (e.g., new maplibregl.Popup, map.on, map.getLayer, etc.),
+    // replace with maptilersdk equivalents if available.
+    // If not available, keep the logic but use the new 'map' object.
+
     // --- Add: Global popup instance for alert polygons ---
-    let alertPopup = new maplibregl.Popup({
+    let alertPopup = new maptilersdk.Popup({
       closeButton: true,
       closeOnClick: false,
       anchor: 'bottom',
@@ -943,26 +958,37 @@ document.querySelector('.reset-colors-btn').addEventListener('click', () => {
         ],
         tileSize: 256
       });
-      // Insert radar layer above polygon fill, but below outline layers
+
+      // Insert radar layer so it renders UNDER road/admin/boundary line layers (so roads/counties stay on top).
+      // Prefer road/admin/boundary layers first so radar is beneath them; fallback to polygon outlines or symbol labels.
       let insertBefore = null;
-      // Find the first zone outline layer (starts with 'layer-' and ends with '-outline')
-      const zoneOutlineLayer = (map.getStyle().layers || []).find(l => l.id && l.id.startsWith('layer-') && l.id.endsWith('-outline'));
-      if (zoneOutlineLayer) {
-          insertBefore = zoneOutlineLayer.id;
-      } else if (map.getLayer('nws-alert-polygons-outline-black')) {
-          insertBefore = 'nws-alert-polygons-outline-black';
-      } else if (map.getLayer('nws-alert-polygons-outline-colored')) {
-          insertBefore = 'nws-alert-polygons-outline-colored';
+      const layerList = map.getStyle().layers || [];
+      const lineMatchRE = /(road|highway|street|rail|bridge|transport|motorway|trunk|secondary|primary|admin|boundary|county)/i;
+      // prefer a road/admin-like line layer
+      const roadOrAdminLayer = layerList.find(l => l && l.id && lineMatchRE.test(l.id));
+      if (roadOrAdminLayer) {
+        insertBefore = roadOrAdminLayer.id;
       } else {
-        // fallback: find first symbol layer (city labels)
-        const layers = map.getStyle().layers;
-        for (const layer of layers) {
-          if (layer.type === 'symbol') {
-            insertBefore = layer.id;
-            break;
+        // fallback: try to insert before polygon outlines so outlines remain on top of radar
+        const outlineCandidates = [
+          'nws-alert-polygons-outline-black',
+          'nws-alert-polygons-outline-colored'
+        ];
+        const outlineLayer = outlineCandidates.map(id => map.getLayer(id)).find(l => !!l) ||
+                             layerList.find(l => l && l.id && l.id.endsWith('-outline'));
+        if (outlineLayer) {
+          insertBefore = outlineLayer.id;
+        } else {
+          // final fallback: before first symbol (labels)
+          for (const layer of layerList) {
+            if (layer.type === 'symbol') {
+              insertBefore = layer.id;
+              break;
+            }
           }
         }
       }
+
       map.addLayer({
         id: rainviewerLayerId,
         type: 'raster',
@@ -1177,7 +1203,7 @@ document.querySelector('.reset-colors-btn').addEventListener('click', () => {
               // Calculate bounds
               let bounds = coordinates.reduce(function(bounds, coord) {
                 return bounds.extend(coord);
-              }, new maplibregl.LngLatBounds(coordinates[0], coordinates[0]));
+              }, new maptilersdk.LngLatBounds(coordinates[0], coordinates[0]));
               map.fitBounds(bounds, { padding: 60, maxZoom: 10, duration: 4000 });
             }
           });
@@ -1389,8 +1415,28 @@ document.querySelector('.reset-colors-btn').addEventListener('click', () => {
           const poly = obj && obj.polygon ? obj.polygon : null;
           if (!Array.isArray(poly) || poly.length === 0) return;
           // Convert [lat, lng] to [lng, lat]
-          const coords = poly.map(pt => [parseFloat(pt[1]), parseFloat(pt[0])]).filter(c => !isNaN(c[0]) && !isNaN(c[1]));
-          if (coords.length === 0) return;
+          // Heuristic: detect whether sheet points are [lng,lat] or [lat,lng]
+          const firstPt = poly[0];
+          let assumeLngLat = true;
+          // If the 2nd value of first point is outside latitude bounds [-90,90] it's very likely longitude,
+          // so assume input is [lat,lng] and we should swap. This covers common US longitudes (abs>90).
+          if (firstPt && firstPt.length >= 2) {
+            const v1 = parseFloat(firstPt[0]);
+            const v2 = parseFloat(firstPt[1]);
+            if (isNaN(v1) || isNaN(v2)) {
+              assumeLngLat = true;
+            } else {
+              // if second value is outside lat range -> it's probably a longitude, so input was [lat,lng]
+              if (Math.abs(v2) > 90) assumeLngLat = false;
+            }
+          }
+          const coords = poly.map(pt => {
+            const a = parseFloat(pt[0]);
+            const b = parseFloat(pt[1]);
+            return assumeLngLat ? [a, b] : [b, a];
+          }).filter(c => !isNaN(c[0]) && !isNaN(c[1]));
+          console.log('sheet polygon parsed (assumeLngLat=', assumeLngLat, ') coords sample:', coords[0], coords.length);
+           if (coords.length === 0) return;
           // ensure closed ring
           if (coords[0][0] !== coords[coords.length - 1][0] || coords[0][1] !== coords[coords.length - 1][1]) {
             coords.push(coords[0].slice());
@@ -1427,7 +1473,8 @@ document.querySelector('.reset-colors-btn').addEventListener('click', () => {
           }
         }
 
-        const sheetFillInsertBefore = map.getLayer(rainviewerLayerId) ? rainviewerLayerId : firstSymbolId;
+        // Prefer inserting BEFORE the rainviewer layer when it exists so sheet fills render under radar.
+        const sheetFillInsertBefore = (map.getLayer(rainviewerLayerId) ? rainviewerLayerId : (preferredLineLayer || firstSymbolId));
         const sheetOutlineInsertBefore = firstSymbolId;
 
         // If we couldn't find a symbol layer, default to top (null) so polygon is on top.
@@ -1439,7 +1486,8 @@ document.querySelector('.reset-colors-btn').addEventListener('click', () => {
             source: 'sheet-polygon',
             paint: {
               'fill-color': '#00FFFF',
-              'fill-opacity': 0.35,
+              // increased opacity for visibility while debugging
+              'fill-opacity': 0.6,
               'fill-outline-color': '#00FFFF'
             }
           }, sheetFillInsertBefore);
@@ -1596,7 +1644,7 @@ document.querySelector('.reset-colors-btn').addEventListener('click', () => {
                 const coords = (f.geometry.type === 'Polygon') ? f.geometry.coordinates[0] : f.geometry.coordinates[0][0];
                 const bounds = coords.reduce(function(b, coord) {
                   return b.extend(coord);
-                }, new maplibregl.LngLatBounds(coords[0], coords[0]));
+                }, new maptilersdk.LngLatBounds(coords[0], coords[0]));
                 map.fitBounds(bounds, { padding: 60, maxZoom: 10, duration: 4000 });
               });
 
@@ -1670,6 +1718,8 @@ document.querySelector('.reset-colors-btn').addEventListener('click', () => {
           // Remove expired/inactive alerts from map and list
           Object.keys(polygonsById).forEach(id => {
             if (!id.startsWith('sheet-eyewatch-')) { // Only process NWS alerts
+
+             
               const polygon = polygonsById[id];
               const expires = polygon?.properties?.expires ? new Date(polygon.properties.expires) : null;
               // Remove if expired or not in current API response
@@ -1981,7 +2031,7 @@ document.querySelector('.reset-colors-btn').addEventListener('click', () => {
             }
             if (!coordinates || coordinates.length === 0) return;
             const bounds = coordinates.reduce((bounds, coord) => bounds.extend(coord),
-              new maplibregl.LngLatBounds(coordinates[0], coordinates[0]));
+              new maptilersdk.LngLatBounds(coordinates[0], coordinates[0]));
             map.fitBounds(bounds, { padding: 60, maxZoom: 10, duration: 4000 });
           });
           container.appendChild(div);
@@ -2326,7 +2376,7 @@ styleSheet.insertRule(`
                           if (coords) zoneCoords.push(coords);
                         }
                         if (!zoneCoords.length) return;
-                        let bounds = new maplibregl.LngLatBounds();
+                        let bounds = new maptilersdk.LngLatBounds();
                         zoneCoords.forEach(coords => {
                           if (Array.isArray(coords[0][0][0])) {
                             coords.forEach(poly => poly[0].forEach(coord => bounds.extend(coord)));
@@ -2376,8 +2426,8 @@ styleSheet.insertRule(`
                     const layers = map.getStyle().layers;
                     for (const layer of layers) {
                         if (layer.type === 'symbol') {
-                            outlineInsertBefore = layer.id;
-                            break;
+                          outlineInsertBefore = layer.id;
+                          break;
                         }
                     }
                 }
@@ -2466,33 +2516,39 @@ styleSheet.insertRule(`
                         }
 
                         // Find insertion points
-                        // Fill: insert *before* rainviewer-radar (so fill is under radar)
+                        // Prefer to insert fill before road/admin line layers so shaded area sits under roads and county borders
                         let insertBefore = null;
+                        const layerList = map.getStyle().layers || [];
                         if (map.getLayer('rainviewer-radar')) {
-                            insertBefore = 'rainviewer-radar';
-                        } else if (map.getLayer('nws-alert-polygons-fill')) {
-                            insertBefore = 'nws-alert-polygons-fill';
+                          insertBefore = 'rainviewer-radar';
                         } else {
-                            insertBefore = map.getStyle().layers.find(layer => layer.type === 'symbol')?.id;
+                          const lineMatchRE = /(road|highway|street|rail|bridge|transport|motorway|trunk|secondary|primary|admin|boundary|county)/i;
+                          const lineLayer = layerList.find(l => l && l.id && lineMatchRE.test(l.id));
+                          if (lineLayer) {
+                            insertBefore = lineLayer.id;
+                          } else if (map.getLayer('nws-alert-polygons-fill')) {
+                            insertBefore = 'nws-alert-polygons-fill';
+                          } else {
+                            insertBefore = layerList.find(layer => layer.type === 'symbol')?.id;
+                          }
                         }
 
-                        // Outline: insert *after* rainviewer-radar (so outline is above radar)
+                        // Outline insertion: keep outlines above radar/NWS polygons (unchanged)
                         let outlineInsertBefore = null;
-                        // Try to insert above NWS polygons, or above first symbol layer if not present
                         if (map.getLayer('nws-alert-polygons-fill')) {
-                            outlineInsertBefore = 'nws-alert-polygons-fill';
+                          outlineInsertBefore = 'nws-alert-polygons-fill';
                         } else {
-                            const layers = map.getStyle().layers;
-                            for (const layer of layers) {
-                                if (layer.type === 'symbol') {
-                                    outlineInsertBefore = layer.id;
-                                    break;
-                                }
+                          const layers2 = map.getStyle().layers;
+                          for (const layer of layers2) {
+                            if (layer.type === 'symbol') {
+                              outlineInsertBefore = layer.id;
+                              break;
                             }
+                          }
                         }
 
                         if (!map.getLayer(layerId)) {
-                          // 1. Add fill layer *under* radar
+                          // 1. Add fill layer *under* road/admin layers (insertBefore chosen above)
                           map.addLayer({
                             id: layerId,
                             type: 'fill',
@@ -2507,12 +2563,12 @@ styleSheet.insertRule(`
                           // If rainviewer-radar exists, insert outline right after it
                           let outlineLayerInsert = null;
                           if (map.getLayer('rainviewer-radar')) {
-                              // Find the layer after rainviewer-radar
-                              const layers = map.getStyle().layers;
-                              const rvIdx = layers.findIndex(l => l.id === 'rainviewer-radar');
-                              if (rvIdx >= 0 && rvIdx < layers.length - 1) {
-                                  outlineLayerInsert = layers[rvIdx + 1].id;
-                              }
+                            // Find the layer after rainviewer-radar
+                            const layers = map.getStyle().layers;
+                            const rvIdx = layers.findIndex(l => l.id === 'rainviewer-radar');
+                            if (rvIdx >= 0 && rvIdx < layers.length - 1) {
+                              outlineLayerInsert = layers[rvIdx + 1].id;
+                            }
                           }
                           // Fallback to outlineInsertBefore if not found
                           if (!outlineLayerInsert) outlineLayerInsert = outlineInsertBefore;
@@ -2720,4 +2776,3 @@ function showEyeWatchDescription(meta, color = "#00FFFF", title = "Eye Watch") {
   descText.innerHTML = buildDescription(meta);
 }
 </script>
-</html>
