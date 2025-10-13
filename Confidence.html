@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Grey – MapTiler Cloud</title>
+    <script src="https://cdn.maptiler.com/maptiler-sdk-js/v3.8.0/maptiler-sdk.umd.min.js"></script>
+      <link href="https://cdn.maptiler.com/maptiler-sdk-js/v3.8.0/maptiler-sdk.css" rel="stylesheet" />
+      <link href="https://fonts.googleapis.com/css?family=Bebas+Neue:400,700&display=swap" rel="stylesheet">
+    <style>
+      body { margin:0; padding:0; font-family: 'Bebas Neue', sans-serif; font-weight: bold; }
+      #map { position:absolute; top:0; bottom:0; width:100%; }
+      #ol-logo { position:absolute; bottom:6px; left:6px; z-index:999; }
+      #ol-logo img { width: 100px; }
+      .ol-zoom { right: .5em; left: unset; }
+      .chess {
+        background:
+          repeating-conic-gradient(
+            #fff 0deg 90deg,
+            #e6e6e6 0deg 180deg)
+          0 0/40px 40px round;
+      }
+      /* Legend styles */
+      #legend {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        background: rgba(255,255,255,0.95);
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        padding: 12px 18px;
+        font-size: 15px;
+        z-index: 1000;
+        font-family: 'Bebas Neue', sans-serif;
+        font-weight: bold;
+      }
+      .legend-row {
+        display: flex;
+        align-items: center;
+        margin-bottom: 6px;
+        font-family: 'Bebas Neue', sans-serif;
+        font-weight: bold;
+      }
+      .legend-color {
+        width: 22px;
+        height: 22px;
+        margin-right: 10px;
+        border-radius: 4px;
+        border: 1px solid #aaa;
+        display: inline-block;
+      }
+      .legend-extreme { background: red; }
+      .legend-high { background: orange; }
+      .legend-medium { background: yellow; }
+      .legend-low { background: green; }
+      /* Make all text bold and Bebas Neue */
+      * {
+        font-family: 'Bebas Neue', sans-serif !important;
+        font-weight: bold !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map" ></div>
+    <!-- Legend rectangle -->
+    <div id="legend">
+      <div class="legend-row"><span class="legend-color legend-extreme"></span>Extreme</div>
+      <div class="legend-row"><span class="legend-color legend-high"></span>High</div>
+      <div class="legend-row"><span class="legend-color legend-medium"></span>Medium</div>
+      <div class="legend-row"><span class="legend-color legend-low"></span>Low</div>
+    </div>
+    <script>
+      var useRetina = window.devicePixelRatio > 1;
+    </script>
+    
+  <script>
+    maptilersdk.config.apiKey = 'CmQHmGrZ2Xo39Iqx78BO';
+    var map = new maptilersdk.Map({
+      container: 'map',
+      style: '01977485-3327-711a-8309-09c8d9dcc02b',
+      hash: true,
+      maptilerLogo: true,
+      maxPitch: 85,
+      language: maptilersdk.Language.STYLE_LOCK
+    });
+
+    // Google Sheets API setup
+    const SHEET_ID = '1_r2ecFzWTxkxvq-6CsbDU-5UBFtJKKX8jW-azAbpLPg';
+    const API_KEY = 'AIzaSyDVE7NuunxAk81C5KzRyC-55PV0D8NwcK8';
+    const RANGE = 'Sheet1!A1:B2'; // Adjust range as needed
+
+    async function fetchSheetData() {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${RANGE}?key=${API_KEY}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      // Assume JSON is in cell B1
+      try {
+        // Find the cell with JSON (adjust if needed)
+        const jsonStr = data.values.flat().find(v => v.trim().startsWith('{'));
+        return JSON.parse(jsonStr);
+      } catch (e) {
+        console.error('Failed to parse JSON from sheet', e);
+        return null;
+      }
+    }
+
+    function drawPolygon(coords, style, idx, level) {
+      // Ensure coordinates are [lng, lat] and polygon is closed
+      let geoCoords = coords.map(pair => [pair[1], pair[0]]);
+      // Close polygon if not already closed
+      if (
+        geoCoords.length > 2 &&
+        (geoCoords[0][0] !== geoCoords[geoCoords.length - 1][0] ||
+         geoCoords[0][1] !== geoCoords[geoCoords.length - 1][1])
+      ) {
+        geoCoords.push([...geoCoords[0]]);
+      }
+      const geojson = {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [geoCoords]
+        },
+        "properties": {
+          "level": level
+        }
+      };
+      map.addSource('polygon' + idx, {
+        type: 'geojson',
+        data: geojson
+      });
+      // Override color based on level
+      let levelColors = {
+        extreme: 'red',
+        high: 'orange',
+        medium: 'yellow',
+        low: 'green'
+      };
+      let fillColor = levelColors[level] || (style && (style.fillColor || style.color)) || 'orange';
+      let lineColor = levelColors[level] || (style && style.color) || 'orange';
+      
+      // Find the first label or road line layer to insert polygons below
+      let belowLayerId = null;
+      const layers = map.getStyle().layers;
+      if (layers) {
+        for (let l of layers) {
+          // Insert below first symbol (label) or line (road) layer
+          if (l.type === 'symbol' || (l.type === 'line' && l.id.toLowerCase().includes('road'))) {
+            belowLayerId = l.id;
+            break;
+          }
+        }
+      }
+
+      map.addLayer({
+        id: 'polygon-layer' + idx,
+        type: 'fill',
+        source: 'polygon' + idx,
+        paint: {
+          'fill-color': fillColor,
+          'fill-opacity': (style && style.fillOpacity) || 0.3
+        }
+      }, belowLayerId);
+
+      map.addLayer({
+        id: 'polygon-outline' + idx,
+        type: 'line',
+        source: 'polygon' + idx,
+        paint: {
+          'line-color': lineColor,
+          'line-width': (style && style.weight) || 2
+        }
+      }, belowLayerId);
+
+      // Add click event for popup
+      map.on('click', 'polygon-layer' + idx, function(e) {
+        const coordinates = e.lngLat;
+        const popup = new maptilersdk.Popup()
+          .setLngLat([coordinates.lng, coordinates.lat])
+          .setHTML(`<b>${level.charAt(0).toUpperCase() + level.slice(1)}</b>`)
+          .addTo(map);
+      });
+
+      // Change cursor to pointer when hovering
+      map.on('mouseenter', 'polygon-layer' + idx, function() {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', 'polygon-layer' + idx, function() {
+        map.getCanvas().style.cursor = '';
+      });
+    }
+
+    map.on('load', () => {
+      fetchSheetData().then(json => {
+        // Show all polygons in json.polygons.low, medium, high, extreme
+        if (json && json.polygons) {
+          ['low', 'medium', 'high', 'extreme'].forEach(level => {
+            if (Array.isArray(json.polygons[level])) {
+              json.polygons[level].forEach((poly, idx) => {
+                if (poly.polygon && Array.isArray(poly.polygon)) {
+                  drawPolygon(poly.polygon, poly.style, level + '-' + idx, level);
+                }
+              });
+            }
+          });
+        }
+      });
+    });
+  </script>
+  
+  </body>
+  </html>
