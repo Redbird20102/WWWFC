@@ -1414,28 +1414,10 @@ document.querySelector('.reset-colors-btn').addEventListener('click', () => {
         normalized.forEach((obj, idx) => {
           const poly = obj && obj.polygon ? obj.polygon : null;
           if (!Array.isArray(poly) || poly.length === 0) return;
-          // Convert [lat, lng] to [lng, lat]
-          // Heuristic: detect whether sheet points are [lng,lat] or [lat,lng]
-          const firstPt = poly[0];
-          let assumeLngLat = true;
-          // If the 2nd value of first point is outside latitude bounds [-90,90] it's very likely longitude,
-          // so assume input is [lat,lng] and we should swap. This covers common US longitudes (abs>90).
-          if (firstPt && firstPt.length >= 2) {
-            const v1 = parseFloat(firstPt[0]);
-            const v2 = parseFloat(firstPt[1]);
-            if (isNaN(v1) || isNaN(v2)) {
-              assumeLngLat = true;
-            } else {
-              // if second value is outside lat range -> it's probably a longitude, so input was [lat,lng]
-              if (Math.abs(v2) > 90) assumeLngLat = false;
-            }
-          }
-          const coords = poly.map(pt => {
-            const a = parseFloat(pt[0]);
-            const b = parseFloat(pt[1]);
-            return assumeLngLat ? [a, b] : [b, a];
-          }).filter(c => !isNaN(c[0]) && !isNaN(c[1]));
-          console.log('sheet polygon parsed (assumeLngLat=', assumeLngLat, ') coords sample:', coords[0], coords.length);
+          // Always convert from [lat, lng] (Google Sheets) to [lng, lat] (MapTiler)
+          const coords = poly.map(pt => [parseFloat(pt[1]), parseFloat(pt[0])])
+            .filter(c => !isNaN(c[0]) && !isNaN(c[1]));
+          console.log('sheet polygon parsed coords sample:', coords[0], coords.length);
            if (coords.length === 0) return;
           // ensure closed ring
           if (coords[0][0] !== coords[coords.length - 1][0] || coords[0][1] !== coords[coords.length - 1][1]) {
@@ -1444,7 +1426,7 @@ document.querySelector('.reset-colors-btn').addEventListener('click', () => {
           features.push({
             type: 'Feature',
             geometry: { type: 'Polygon', coordinates: [coords] },
-            properties: { sheetIndex: idx, _sheetMeta: obj } // PATCH: store full meta
+            properties: { sheetIndex: idx, _sheetMeta: obj }
           });
           parsedMeta.push(obj);
         });
