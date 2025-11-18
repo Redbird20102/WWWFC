@@ -2163,17 +2163,54 @@ styleSheet.insertRule(`
             }));
         }
 
-        async function fetchPolygon(zoneLink) {
-            const zoneResponse = await fetch(zoneLink);
-            const zoneData = await zoneResponse.json();
+        // --- NEW: Zone polygon cache (each entry: { coords, expiresAt }) ---
+        const zonePolygonCache = new Map();
+        const ZONE_POLYGON_CACHE_TTL = 10 * 60 * 1000; // 10 minutes TTL
 
-            // Handle both Polygon and MultiPolygon geometries
-            if (zoneData.geometry.type === "Polygon" || zoneData.geometry.type === "MultiPolygon") {
-                return zoneData.geometry.coordinates;
+        // Avoid flooding with parallel fetches for same zone link
+        const zoneFetchInflight = new Map();
+
+        async function fetchPolygon(zoneLink) {
+            // Use cache to avoid repeated fetching/parsing and reduce CPU work
+            const cached = zonePolygonCache.get(zoneLink);
+            if (cached && (Date.now() < cached.expiresAt)) {
+                return cached.coords;
             }
 
-            console.warn(`Unsupported geometry type: ${zoneData.geometry.type}`);
-            return null;
+            // If an inflight fetch exists, reuse the same promise
+            if (zoneFetchInflight.has(zoneLink)) {
+                try {
+                    const coords = await zoneFetchInflight.get(zoneLink);
+                    return coords;
+                } catch (e) {
+                    // If the previous fetch failed, fall through to a new fetch attempt
+                }
+            }
+
+            // Store a promise during fetch to throttle repeated simultaneous requests
+            const fetchPromise = (async () => {
+                try {
+                    const zoneResponse = await fetch(zoneLink);
+                    const zoneData = await zoneResponse.json();
+                    if (!zoneData || !zoneData.geometry) return null;
+                    if (zoneData.geometry.type === "Polygon" || zoneData.geometry.type === "MultiPolygon") {
+                        const coords = zoneData.geometry.coordinates;
+                        // store in cache
+                        zonePolygonCache.set(zoneLink, {
+                            coords,
+                            expiresAt: Date.now() + ZONE_POLYGON_CACHE_TTL
+                        });
+                        return coords;
+                    }
+                    console.warn(`Unsupported geometry type: ${zoneData.geometry.type}`);
+                    return null;
+                } finally {
+                    // cleanup inflight map on completion
+                    zoneFetchInflight.delete(zoneLink);
+                }
+            })();
+            zoneFetchInflight.set(zoneLink, fetchPromise);
+            return fetchPromise;
         }
 
         async function fetchActiveAlerts() {
@@ -2202,8 +2239,6 @@ styleSheet.insertRule(`
 
                 const alerts = await fetchActiveAlerts();
                 if (signal.aborted) return;
-
-                const newSources = new Set();
 
                 // --- GROUP alerts by event and affectedZones ---
                 const groupedAlerts = {};
@@ -2293,7 +2328,7 @@ styleSheet.insertRule(`
                       }
                     }
 
-                    // Find insertion point: after last non-zone alert
+                    // Find insertion point after last non-zone alert
                     let lastNwsAlert = null;
                     const alertItems = alertContainer.querySelectorAll('.nws-alert-item:not([data-alert-id^="zone-"])');
                     if (alertItems.length > 0) lastNwsAlert = alertItems[alertItems.length - 1];
@@ -2351,9 +2386,11 @@ styleSheet.insertRule(`
                         <div class="nws-alert-expires">Zone Alert</div>
                       `;
 
+                      // Click handler now uses cached zone polygons instead of re-fetching each zone
                       alertDiv.addEventListener('click', async () => {
                         const zoneCoords = [];
                         for (const zoneLink of group.affectedZones) {
+                          // Use cached value if present; otherwise the shared fetch will fetch and cache
                           const coords = await fetchPolygon(zoneLink);
                           if (coords) zoneCoords.push(coords);
                         }
@@ -2368,28 +2405,26 @@ styleSheet.insertRule(`
                         });
                         map.fitBounds(bounds, { padding: 50, maxZoom: 10, duration: 2000 });
 
-                        // Show popup at centroid of first polygon
+                        // Show popup at centroid (compute from combined group polygons using existing helper)
+                        let centroid = null;
                         if (zoneCoords.length) {
-                          let centroid = null;
                           if (Array.isArray(zoneCoords[0][0][0])) {
-                            // MultiPolygon
-                            centroid = getPolygonCentroid({type: "MultiPolygon", coordinates: zoneCoords});
+                            centroid = getPolygonCentroid({ type: "MultiPolygon", coordinates: zoneCoords });
                           } else {
-                            centroid = getPolygonCentroid({type: "Polygon", coordinates: zoneCoords});
+                            centroid = getPolygonCentroid({ type: "Polygon", coordinates: zoneCoords });
                           }
-                          if (centroid) {
-                            alertPopup.setLngLat(centroid)
-                              .setHTML(`<div>${group.event}</div>`)
-                              .addTo(map);
-                          }
+                        }
+                        if (centroid) {
+                          alertPopup.setLngLat(centroid)
+                            .setHTML(`<div>${group.event}</div>`)
+                            .addTo(map);
                         }
                       });
 
-                      // Insert after lastNwsAlert, or append if none
+                      // Insert in UI
                       if (lastNwsAlert && lastNwsAlert.nextSibling) {
                         alertContainer.insertBefore(alertDiv, lastNwsAlert.nextSibling);
                       } else if (lastNwsAlert) {
-
                         alertContainer.appendChild(alertDiv);
                       } else {
                         alertContainer.appendChild(alertDiv);
@@ -2398,232 +2433,162 @@ styleSheet.insertRule(`
                     }
                 }
 
-                // Continue with existing polygon rendering
-                // Add this before the groupPromises loop
-                // Find a good insertion point for outlines above rainviewer
-                let outlineInsertBefore = null;
-                if (map.getLayer('nws-alert-polygons-outline-black')) {
-                    outlineInsertBefore = 'nws-alert-polygons-outline-black';
-                } else {
-                    const layers = map.getStyle().layers;
-                    for (const layer of layers) {
-                        if (layer.type === 'symbol') {
-                          outlineInsertBefore = layer.id;
-                          break;
-                        }
-                    }
-                }
-
-                const groupPromises = Object.entries(groupedAlerts)
+                // --- NEW: Build aggregated MultiPolygon features for all groups ---
+                const groups = Object.entries(groupedAlerts)
                     .sort((a, b) => b[1].priority - a[1].priority)
-                    .map(async ([key, group]) => {
-                        // Use alertColors for zone color
-                        const fillColor =
-                            alertColors[group.event] ||
-                            {
-                                "Tornado Watch": "#FF8080",
-                                "Severe Thunderstorm Watch": "#FFFF80",
-                                "Hurricane Warning": "#2B0001",
-                                "Tropical Storm Warning": "#7E0001",
-                                "Storm Surge Warning": "#7F494A",
-                                "Hurricane Watch": "#D50305",
-                                "Tropical Storm Watch": "#D46060",
-                                "Winter Storm Warning": "#328FFE",
-                                "Storm Surge Watch": "#883031",
-                                "Tsunami Watch": "#FF8847",
-                                "Tsunami Warning": "#FD6347",
-                                "Fire Warning": "#8B0000",
-                                "Extreme Heat Warning": "#FF1493",
-                                "Red Flag Warning": "#FF69B4",
-                                "Avalanche Warning": "#C20084",
-                                "Lake Effect Snow Warning": "#0008B8",
-                                "Avalanche Watch": "#F4A460",
-                                "Blizzard Warning": "#003BFA",
-                                "Ice Storm Warning": "#7000D1",
-                                "Extreme Cold Warning": "#36367D",
-                                "Winter Storm Watch": "#6FDBFF",
-                                "Winter Weather Advisory": "#4249FF",
-                                "Extreme Heat Watch": "#8B0000",
-                                "Fire Weather Watch": "#FFB6C1",
-                                "Freeze Warning": "#0701B2",
-                                "Cold Weather Advisory": "#FFBDEA",
-                                "Heat Advisory": "#FF69B4",
-                                "Extreme Cold Watch": "#FF8ADA",
-                                "Freeze Watch": "#6461B8",
-                                "Flood Watch": "#B4F8FF",
-                                "Flash Flood Watch": "#B4F8FF",
-                                "Small Craft Advisory": "#EECCFF",
-                                "Special Weather Statement": "#A06AD9"
-                            }[group.event] || '#A06AD9';
+                    .map(([key, group]) => group); // simplified list
 
-                        // Fetch all zone polygons
-                        const zoneCoords = [];
-                        for (const zoneLink of group.affectedZones) {
-                            const coords = await fetchPolygon(zoneLink);
-                            if (coords) zoneCoords.push(coords);
-                        }
-                        if (!zoneCoords.length) return;
+                // Build features array in parallel
+                const featurePromises = groups.map(async group => {
+                    // for each group, gather coords for all affectedZones
+                    const zoneSources = group.affectedZones || [];
+                    const fetchedCoords = await Promise.all(zoneSources.map(z => fetchPolygon(z).catch(() => null)));
+                    const validCoords = fetchedCoords.filter(v => v && v.length);
+                    if (!validCoords.length) return null;
 
-                        // Flatten all polygons/multipolygons into a MultiPolygon
-                        const multiCoords = [];
-                        for (const coords of zoneCoords) {
-                            if (Array.isArray(coords[0][0][0])) {
-                                // MultiPolygon
-                                coords.forEach(poly => multiCoords.push(poly));
-                            } else {
-                                // Polygon
-                                multiCoords.push(coords);
-                            }
-                        }
-
-                        const polygon = {
-                          type: 'Feature',
-                          geometry: {
-                              type: 'MultiPolygon',
-                              coordinates: multiCoords
-                          }
-                        };
-
-                        const sourceId = `source-${group.priority}-${key}`;
-                        const layerId = `layer-${group.priority}-${key}`;
-                        newSources.add(sourceId);
-
-                        if (!map.getSource(sourceId)) {
-                            map.addSource(sourceId, {
-                                type: 'geojson',
-                                data: polygon
-                            });
+                    // Flatten polygons into MultiPolygon coordinate array
+                    const multiCoords = [];
+                    for (const coords of validCoords) {
+                        if (Array.isArray(coords[0][0][0])) {
+                            // MultiPolygon
+                            coords.forEach(poly => multiCoords.push(poly));
                         } else {
-                            map.getSource(sourceId).setData(polygon);
-                        }
-
-                        // Find insertion points
-                        // Prefer to insert fill before road/admin line layers so shaded area sits under roads and county borders
-                        let insertBefore = null;
-                        const layerList = map.getStyle().layers || [];
-                        if (map.getLayer('rainviewer-radar')) {
-                          insertBefore = 'rainviewer-radar';
-                        } else {
-                          const lineMatchRE = /(road|highway|street|rail|bridge|transport|motorway|trunk|secondary|primary|admin|boundary|county)/i;
-                          const lineLayer = layerList.find(l => l && l.id && lineMatchRE.test(l.id));
-                          if (lineLayer) {
-                            insertBefore = lineLayer.id;
-                          } else if (map.getLayer('nws-alert-polygons-fill')) {
-                            insertBefore = 'nws-alert-polygons-fill';
-                          } else {
-                            insertBefore = layerList.find(layer => layer.type === 'symbol')?.id;
-                          }
-                        }
-
-                        // Outline insertion: keep outlines above radar/NWS polygons (unchanged)
-                        let outlineInsertBefore = null;
-                        if (map.getLayer('nws-alert-polygons-fill')) {
-                          outlineInsertBefore = 'nws-alert-polygons-fill';
-                        } else {
-                          const layers2 = map.getStyle().layers;
-                          for (const layer of layers2) {
-                            if (layer.type === 'symbol') {
-                              outlineInsertBefore = layer.id;
-                              break;
-                            }
-                          }
-                        }
-
-                        if (!map.getLayer(layerId)) {
-                          // 1. Add fill layer *under* road/admin layers (insertBefore chosen above)
-                          map.addLayer({
-                            id: layerId,
-                            type: 'fill',
-                            source: sourceId,
-                            paint: {
-                              'fill-color': fillColor,
-                              'fill-opacity': 0.5
-                            }
-                          }, insertBefore);
-
-                          // 2. Add outline layer *above* radar
-                          // If rainviewer-radar exists, insert outline right after it
-                          let outlineLayerInsert = null;
-                          if (map.getLayer('rainviewer-radar')) {
-                            // Find the layer after rainviewer-radar
-                            const layers = map.getStyle().layers;
-                            const rvIdx = layers.findIndex(l => l.id === 'rainviewer-radar');
-                            if (rvIdx >= 0 && rvIdx < layers.length - 1) {
-                              outlineLayerInsert = layers[rvIdx + 1].id;
-                            }
-                          }
-                          // Fallback to outlineInsertBefore if not found
-                          if (!outlineLayerInsert) outlineLayerInsert = outlineInsertBefore;
-
-                          map.addLayer({
-                            id: `${layerId}-outline`,
-                            type: 'line',
-                            source: sourceId,
-                            paint: {
-                              'line-color': fillColor,
-                              'line-width': 2
-                            }
-                          }, outlineLayerInsert);
-                        } else {
-                          // Update color if already exists
-                          map.setPaintProperty(layerId, 'fill-color', fillColor);
-                          map.setPaintProperty(`${layerId}-outline`, 'line-color', fillColor);
-                        }
-
-                        // Add popup and cursor handlers for zone polygons
-                        map.on('click', layerId, function(e) {
-                          if (!e.features || !e.features.length) return;
-                          // Try to get areaDesc and expires from any matching NWS alert for this zone
-                          let areaDesc = '';
-                          let expires = '';
-                          if (window.nwsAlertFeatures && Array.isArray(window.nwsAlertFeatures)) {
-                            for (const f of window.nwsAlertFeatures) {
-                              // Match event and affectedZones
-                              if (f.properties && f.properties.event === group.event && f.properties.affectedZones) {
-                                for (const zone of group.affectedZones) {
-                                  if (f.properties.affectedZones.includes(zone)) {
-                                    areaDesc = f.properties.areaDesc || '';
-                                    expires = f.properties.expires || '';
-                                    break;
-                                  }
-                                }
-                                if (areaDesc || expires) break;
-                              }
-                            }
-                          }
-                          showAlertPopupOnPolygon(
-                            {
-                              geometry: e.features[0].geometry,
-                              properties: {
-                                event: group.event
-                                // do not set areaDesc/expires here, let fallback handle it
-                              }
-                            },
-                            areaDesc,
-                            expires
-                          );
-                        });
-                        map.on('mouseenter', layerId, function() { map.getCanvas().style.cursor = 'pointer'; });
-                        map.on('mouseleave', layerId, function() { map.getCanvas().style.cursor = ''; });
-                    });
-    
-                await Promise.all(groupPromises);
-                if (signal.aborted) return;
-
-                // Remove old sources/layers
-                for (const sourceId of activeSources) {
-                    if (!newSources.has(sourceId)) {
-                        const layerId = sourceId.replace('source-', 'layer-');
-                        if (map.getLayer(layerId)) {
-                            map.removeLayer(layerId);
-                            map.removeLayer(`${layerId}-outline`);
-                        }
-                        if (map.getSource(sourceId)) {
-                            map.removeSource(sourceId);
+                            // Polygon
+                            multiCoords.push(coords);
                         }
                     }
+
+                    // Determine fillColor via alertColors or fallback mapping
+                    const fillColor = alertColors[group.event] ||
+                      {
+                        "Tornado Watch": "#FF8080",
+                        "Severe Thunderstorm Watch": "#FFFF80",
+                        "Hurricane Warning": "#2B0001",
+                        "Tropical Storm Warning": "#7E0001",
+                        "Storm Surge Warning": "#7F494A",
+                        "Hurricane Watch": "#D50305",
+                        "Tropical Storm Watch": "#D46060",
+                        "Winter Storm Warning": "#328FFE",
+                        "Storm Surge Watch": "#883031",
+                        "Tsunami Watch": "#FF8847",
+                        "Tsunami Warning": "#FD6347",
+                        "Fire Warning": "#8B0000",
+                        "Extreme Heat Warning": "#FF1493",
+                        "Red Flag Warning": "#FF69B4",
+                        "Avalanche Warning": "#C20084",
+                        "Lake Effect Snow Warning": "#0008B8",
+                        "Avalanche Watch": "#F4A460",
+                        "Blizzard Warning": "#003BFA",
+                        "Ice Storm Warning": "#7000D1",
+                        "Extreme Cold Warning": "#36367D",
+                        "Winter Storm Watch": "#6FDBFF",
+                        "Winter Weather Advisory": "#4249FF",
+                        "Extreme Heat Watch": "#8B0000",
+                        "Fire Weather Watch": "#FFB6C1",
+                        "Freeze Warning": "#0701B2",
+                        "Cold Weather Advisory": "#FFBDEA",
+                        "Heat Advisory": "#FF69B4",
+                        "Extreme Cold Watch": "#FF8ADA",
+                        "Freeze Watch": "#6461B8",
+                        "Flood Watch": "#B4F8FF",
+                        "Flash Flood Watch": "#B4F8FF",
+                        "Small Craft Advisory": "#EECCFF",
+                        "Special Weather Statement": "#A06AD9"
+                      }[group.event] || '#A06AD9';
+
+                    return {
+                        type: 'Feature',
+                        id: group.id,
+                        geometry: {
+                            type: 'MultiPolygon',
+                            coordinates: multiCoords
+                        },
+                        properties: {
+                            id: group.id,
+                            event: group.event,
+                            priority: group.priority,
+                            fillColor: fillColor
+                        }
+                    };
+                });
+
+                // Wait for all features to resolve (some groups may be null if they had no polygons)
+                const builtFeatures = (await Promise.all(featurePromises)).filter(f => f !== null);
+
+                // Build GeoJSON feature collection
+                const zoneGeojson = {
+                    type: 'FeatureCollection',
+                    features: builtFeatures
+                };
+
+                // Add/update a single source & two layers for all zone polygons — much cheaper than one per group
+                if (map.getSource('zone-alerts')) {
+                    try {
+                        map.getSource('zone-alerts').setData(zoneGeojson);
+                    } catch (e) {
+                        // Source may not accept update until map style is fully ready, handle safely
+                        console.warn('zone-alerts source setData failed, re-adding source', e);
+                        if (map.getLayer('zone-alerts-fill')) { try { map.removeLayer('zone-alerts-fill'); } catch(_){} }
+                        if (map.getLayer('zone-alerts-outline')) { try { map.removeLayer('zone-alerts-outline'); } catch(_){} }
+                        if (map.getSource('zone-alerts')) { try { map.removeSource('zone-alerts'); } catch(_){} }
+                        map.addSource('zone-alerts', { type: 'geojson', data: zoneGeojson });
+                    }
+                } else {
+                    // add new source
+                    map.addSource('zone-alerts', { type: 'geojson', data: zoneGeojson });
+
+                    // Find layer insertion points once (avoid doing this repeatedly)
+                    const layers = map.getStyle()?.layers || [];
+                    let insertBefore = null;
+                    if (map.getLayer('rainviewer-radar')) {
+                      insertBefore = 'rainviewer-radar';
+                    } else {
+                      const lineMatchRE = /(road|highway|street|rail|bridge|transport|motorway|trunk|secondary|primary|admin|boundary|county)/i;
+                      const lineLayer = layers.find(l => l && l.id && lineMatchRE.test(l.id));
+                      if (lineLayer) insertBefore = lineLayer.id;
+                      else insertBefore = layers.find(l => l.type === 'symbol')?.id;
+                    }
+
+                    // Combined fill layer (uses feature property fillColor)
+                    map.addLayer({
+                        id: 'zone-alerts-fill',
+                        type: 'fill',
+                        source: 'zone-alerts',
+                        layout: {},
+                        paint: {
+                            'fill-color': ['get', 'fillColor'],
+                            'fill-opacity': 0.45,
+                            'fill-outline-color': ['get', 'fillColor']
+                        }
+                    }, insertBefore);
+
+                    // Outline layer
+                    // Insert outline above fill so the outline is visible
+                    map.addLayer({
+                        id: 'zone-alerts-outline',
+                        type: 'line',
+                        source: 'zone-alerts',
+                        paint: {
+                            'line-color': ['get', 'fillColor'],
+                            'line-width': 2
+                        }
+                    }, /* insertBefore */ insertBefore ? insertBefore : undefined);
+
+                    // Register click/cursor handlers once for this single combined layer
+                    map.on('click', 'zone-alerts-fill', function (e) {
+                        if (!e || !e.features || !e.features.length) return;
+                        const feature = e.features[0];
+                        const props = feature.properties || {};
+                        // Use geometry and show popup via existing popup helper
+                        showAlertPopupOnPolygon(feature, props.areaDesc || '', props.expires || '');
+                    });
+                    map.on('mouseenter', 'zone-alerts-fill', function() { map.getCanvas().style.cursor = 'pointer'; });
+                    map.on('mouseleave', 'zone-alerts-fill', function() { map.getCanvas().style.cursor = ''; });
                 }
-                activeSources = newSources;
+
+                // avoid expensive removal of per-group layers/sources — we've moved to a single combined source+layer
+                // existing removal logic that cleaned up activeSources is not needed here.
+
             } catch (error) {
                 if (error.name === 'AbortError') {
                     console.log('Update was cancelled');
@@ -2638,7 +2603,7 @@ styleSheet.insertRule(`
 
         map.on('load', () => {
             displayPolygons().catch(console.error);
-            // Poll every 10 seconds instead of every second
+            // Poll every 10 seconds (was 1 second before) — reduces polling costs and avoids re-rendering too often
             setInterval(() => {
                 displayPolygons().catch(console.error);
             }, 10000);
