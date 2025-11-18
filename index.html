@@ -6,42 +6,46 @@
     <title>WWWFC - Welcome</title>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
     <style>
+        /* Add Christmas palette */
+        :root {
+            --christmas-green: #00ff44d0; /* normal deep green */
+            --christmas-red: #ff0000e7;   /* normal red */
+            --christmas-white: #ffffff;
+            --dark: #07140a;
+        }
+
         body {
             margin: 0;
             height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
-            background: linear-gradient(135deg, #001f5c 0%, #000000 40%, #004699 70%, #001f5c 100%);
+            /* Change background to black and red gradient */
+            background: linear-gradient(135deg, #000000 0%, #ff0000 100%);
             font-family: 'Bebas Neue', sans-serif;
             font-weight: bold;
             overflow: hidden;
             position: relative;
-            animation: backgroundZoom 40s infinite alternate ease-in-out;
+            /* Removed animation: backgroundZoom 40s infinite alternate ease-in-out; */
             margin-left: 200px; /* Add space for nav */
         }
 
-        @keyframes backgroundZoom {
-            0% { background-size: 100% 100%; background-position: 0% 0%; }
-            50% { background-size: 130% 130%; background-position: 30% 30%; }
-            100% { background-size: 120% 120%; background-position: 10% 10%; }
-        }
-
+        /* Light sweep colors (soft white + subtle red and green) */
         .light-sweep {
             position: absolute;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent);
             animation: sweep 2.5s infinite linear;
             transform: skewX(-20deg);
-            filter: blur(5px);
+            filter: blur(3px);
         }
 
         .light-sweep-2 {
             position: absolute;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(0,255,255,0.1), transparent);
+            background: linear-gradient(90deg, transparent, rgba(11,102,35,0.09), transparent); /* green tint */
             animation: sweep 4s infinite linear;
             transform: skewX(-20deg);
         }
@@ -50,7 +54,7 @@
             position: absolute;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,140,0,0.1), transparent);
+            background: linear-gradient(90deg, transparent, rgba(179,0,0,0.08), transparent); /* red tint */
             animation: sweep 3.5s infinite linear;
             transform: skewX(-20deg);
         }
@@ -60,20 +64,21 @@
             100% { transform: translateX(200%) skewX(-20deg); }
         }
 
+        /* Content box: green-toned background and red-green glow */
         .content {
             text-align: center;
             color: white;
             z-index: 1;
             animation: pulse 2s ease-in-out infinite;
             padding: 2rem;
-            background: rgba(0, 10, 30, 0.4);
-            box-shadow: 
-                0 0 50px rgba(0, 255, 255, 0.2),
-                0 0 100px rgba(0, 255, 255, 0.1),
-                inset 0 0 30px rgba(0, 255, 255, 0.1);
-            border: 1px solid rgba(0, 255, 255, 0.2);
+            background: rgba(10, 30, 12, 0.6);
+            box-shadow:
+                0 0 50px rgba(255, 0, 0, 0.1),
+                0 0 100px rgba(11, 179, 56, 0.08),
+                inset 0 0 30px rgba(15, 179, 58, 0.08);
+            border: 1px solid rgba(255, 0, 0, 0.3);
             border-radius: 15px;
-            animation: 
+            animation:
                 pulse 2s ease-in-out infinite,
                 borderGlow 3s linear infinite;
             transition: transform 0.3s ease, box-shadow 0.3s ease;
@@ -109,6 +114,7 @@
             box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
         }
 
+        /* Particle / Snow styling */
         .particles {
             position: absolute;
             top: 0;
@@ -121,63 +127,73 @@
 
         .particle {
             position: absolute;
-            width: 3px;
-            height: 3px;
-            background: cyan;
+            width: 6px;
+            height: 6px;
+            background: var(--christmas-white);
             border-radius: 50%;
-            animation: particleFall 15s infinite linear, particleGlow 2s infinite alternate;
-            filter: blur(1px);
-            box-shadow: 
-                0 0 15px currentColor,
-                0 0 30px currentColor;
-            opacity: 0.7;
-            transform-style: initial;
-        }
-
-        @keyframes particleGlow {
-            0% { filter: blur(1px) brightness(1); }
-            100% { filter: blur(2px) brightness(1.5); }
+            animation: particleFall 12s infinite linear, particleGlow 3s infinite alternate;
+            filter: blur(0.5px);
+            box-shadow:
+                0 0 8px currentColor,
+                0 0 20px currentColor;
+            opacity: 0.9;
         }
 
         .particle:nth-child(2n) {
-            background: linear-gradient(45deg, cyan, blue);
+            background: var(--christmas-red);
+            box-shadow:
+                0 0 10px rgba(255, 0, 0, 0.562),
+                0 0 20px rgba(255, 0, 0, 0.562);
         }
 
         .particle:nth-child(3n) {
-            width: 4px;
-            height: 4px;
-            color: #4ff4ff;
+            background: var(--christmas-green);
+            width: 5px;
+            height: 5px;
+            box-shadow:
+                0 0 10px rgba(13, 165, 54, 0.5),
+                0 0 20px rgba(14, 145, 49, 0.3);
         }
 
         .particle:nth-child(3n+1) {
-            width: 2px;
-            height: 2px;
-            color: #0088ff;
+            background: var(--christmas-white);
+            width: 8px;
+            height: 8px;
+            opacity: 0.95;
         }
 
+        @keyframes particleFall {
+            from { transform: translateY(-120vh) rotate(0deg); }
+            to { transform: translateY(120vh) rotate(90deg); }
+        }
+
+        @keyframes particleGlow {
+            0% { filter: blur(0.5px) brightness(1); }
+            100% { filter: blur(1px) brightness(1.2); }
+        }
+
+        /* h1 and p gradients switch to red & green with mild white accents */
         h1 {
             font-size: 5rem;
             margin: 0;
             letter-spacing: 3px;
             background: linear-gradient(
                 to right,
-                #00ffff 0%,
-                #ffffff 20%,
-                #4ff4ff 40%,
-                #ffffff 60%,
-                #00ffff 80%,
-                #4ff4ff 100%
+                var(--christmas-red) 0%,
+                var(--christmas-white) 35%,
+                var(--christmas-green) 70%,
+                var(--christmas-red) 100%
             );
             background-size: 200% auto;
             color: transparent;
             -webkit-background-clip: text;
             background-clip: text;
-            animation: 
+            animation:
                 shine 2s linear infinite,
                 shimmer 2s infinite,
                 float 4s ease-in-out infinite;
             text-shadow: none;
-            filter: drop-shadow(0 0 20px rgba(0,255,255,0.4)) brightness(1.2);
+            filter: drop-shadow(0 0 20px rgba(255, 0, 0, 0.25));
             text-transform: uppercase;
             position: relative;
         }
@@ -199,9 +215,9 @@
             opacity: 0.8;
             background: linear-gradient(
                 to right,
-                rgb(162, 255, 255) 20%,
+                rgb(210, 255, 210) 20%,
                 white 50%,
-                rgb(88, 255, 255) 80%
+                rgb(255, 210, 210) 80%
             );
             background-size: 200% auto;
             color: transparent;
@@ -209,7 +225,7 @@
             background-clip: text;
             animation: shine 5s linear infinite;
             text-shadow: none;
-            filter: drop-shadow(0 0 8px rgba(0,255,255,0.3));
+            filter: drop-shadow(0 0 8px rgba(0,0,0,0.35));
         }
 
         @keyframes shine {
@@ -223,79 +239,56 @@
             50% { transform: scale(1.02); }
         }
 
+        /* Glow animation uses red & green steps */
         @keyframes borderGlow {
-            0% { border-color: cyan; }
-            33% { border-color: #4ff4ff; }
-            66% { border-color: #0088ff; }
-            100% { border-color: cyan; }
+            0% { border-color: var(--christmas-red); box-shadow: 0 0 15px rgba(179,0,0,0.15); }
+            33% { border-color: var(--christmas-green); box-shadow: 0 0 20px rgba(11,102,35,0.12); }
+            66% { border-color: var(--christmas-red); box-shadow: 0 0 25px rgba(179,0,0,0.14); }
+            100% { border-color: var(--christmas-green); box-shadow: 0 0 18px rgba(11,102,35,0.12); }
         }
 
-        @keyframes shimmer {
-            0% { filter: drop-shadow(0 0 20px rgba(0,255,255,0.3)) brightness(1); }
-            50% { filter: drop-shadow(0 0 30px rgba(0,255,255,0.6)) brightness(1.3); }
-            100% { filter: drop-shadow(0 0 20px rgba(0,255,255,0.3)) brightness(1); }
-        }
-
-        @keyframes particleFall {
-            from { transform: translateY(-100vh) rotate(0deg); }
-            to { transform: translateY(100vh) rotate(360deg); }
-        }
-
-        .lightning {
+        /* Replace 'star' with 'snowflake' styling to show glyphs */
+        .star, .snowflake {
             position: absolute;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 2;
-            opacity: 0;
-            animation: lightning 10s infinite;
-        }
-
-        @keyframes lightning {
-            0%, 95%, 98% { opacity: 0; }
-            96%, 99% { opacity: 0.8; background: white; }
-        }
-
-        .star {
-            position: absolute;
-            width: 2px;
-            height: 2px;
-            background: white;
+            font-size: 12px;
+            color: var(--christmas-white);
             animation: twinkle 3s infinite;
-            box-shadow: 
-                0 0 4px white,
-                0 0 8px rgba(0, 255, 255, 0.8);
-            filter: blur(1px);
+            text-shadow:
+                0 0 4px rgba(255,255,255,0.9),
+                0 0 8px rgba(11,102,35,0.6);
+            filter: blur(0.5px);
         }
 
         @keyframes twinkle {
-            0%, 100% { opacity: 0.2; }
-            50% { opacity: 1; transform: scale(1.5); }
+            0%, 100% { opacity: 0.2; transform: translateY(0) scale(1); }
+            50% { opacity: 1; transform: translateY(-4px) scale(1.3); }
         }
 
+        /* rain is changed to gentle snow overlay */
         .rain {
             position: absolute;
             width: 100%;
             height: 100%;
-            background: linear-gradient(transparent, rgba(0,255,255,0.2));
-            animation: rain 1s linear infinite;
-            opacity: 0.1;
+            background: linear-gradient(transparent, rgba(255, 255, 255, 0.05));
+            opacity: 0.06;
+            animation: snowDrift 6s linear infinite;
         }
 
-        @keyframes rain {
-            0% { transform: translateY(-100%); }
-            100% { transform: translateY(100%); }
+        @keyframes snowDrift {
+            0% { transform: translateY(-30%); }
+            100% { transform: translateY(30%); }
         }
 
+        /* Nav updated to greener background with red hover highlight */
         .nav-menu {
             position: fixed;
             left: 0;
             top: 0;
             height: 100%;
             width: 200px;
-            background: rgba(0, 15, 40, 0.7);
-            border-right: 1px solid rgba(0, 255, 255, 0.15);
-            box-shadow: 5px 0 30px rgba(0, 0, 0, 0.3);
+            background: linear-gradient(180deg, rgba(175, 8, 8, 0.95) 0%, rgba(0, 0, 0, 0.575) 100%);
+            border-right: 1px solid rgba(179,0,0,0.12);
+            box-shadow: 5px 0 30px rgba(0, 0, 0, 0.4);
             backdrop-filter: blur(15px);
             padding: 20px;
             display: flex;
@@ -312,20 +305,76 @@
             border: 1px solid transparent;
             border-radius: 8px;
             transition: all 0.3s ease;
-            background: linear-gradient(135deg, rgba(0, 30, 60, 0.4), rgba(0, 15, 40, 0.6));
+            background: linear-gradient(135deg, rgba(80, 12, 12, 0.7), rgba(0, 0, 0, 0.85));
             letter-spacing: 2px;
             text-transform: uppercase;
             box-shadow: inset 0 1px rgba(255, 255, 255, 0.1);
         }
 
         .nav-link:hover {
-            border-color: cyan;
-            box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+            border-color: var(--christmas-red);
+            box-shadow: 0 0 15px rgba(179,0,0,0.25);
             transform: translateX(5px);
+        }
+
+        /* soften dazzling animations for a festive look */
+        @keyframes shimmer {
+            0% { filter: drop-shadow(0 0 18px rgba(179,0,0,0.18)); }
+            50% { filter: drop-shadow(0 0 28px rgba(11,102,35,0.28)); }
+            100% { filter: drop-shadow(0 0 18px rgba(179,0,0,0.18)); }
+        }
+
+        /* Popup box styling */
+        .popup-update {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            min-width: 700px; /* was 340px, now longer */
+            max-width: 90vw;
+            background: rgba(0, 0, 0, 0.603);
+            color: #0B6623;
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(179,0,0,0.18), 0 0 0 4px #B30000;
+            border: 2px solid #0B6623;
+            z-index: 9999;
+            padding: 2rem 2.5rem 1.5rem 2.5rem;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.4rem;
+            text-align: center;
+            animation: popupFadeIn 0.7s;
+        }
+        @keyframes popupFadeIn {
+            from { opacity: 0; transform: translate(-50%, -60%) scale(0.9);}
+            to { opacity: 1; transform: translate(-50%, -50%) scale(1);}
+        }
+        .popup-update strong {
+            color: #B30000;
+            font-size: 1.2em;
+        }
+        .popup-close {
+            position: absolute;
+            top: 12px;
+            right: 18px;
+            background: #B30000;
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            font-size: 1.3rem;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+            transition: background 0.2s;
+        }
+        .popup-close:hover {
+            background: #0B6623;
         }
     </style>
 </head>
 <body>
+    <!-- Black overlay for popup -->
+    <div id="popupOverlay" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.55);z-index:9998;display:none;"></div>
     <nav class="nav-menu">
         <a href="radar.html" class="nav-link">Radar</a>
         <a href="confidence.html" class="nav-link">Confidence Outlook</a>
@@ -344,39 +393,73 @@
     </div>
     <div class="rain"></div>
     <script>
-        // Add dynamic stars
+        // Add dynamic snowflakes (replaces "stars")
         function createStars() {
             const container = document.body;
-            for(let i = 0; i < 50; i++) {
+            for (let i = 0; i < 18; i++) { // reduced from 40 to 18
                 const star = document.createElement('div');
-                star.className = 'star';
+                star.className = 'snowflake';
+                star.textContent = '❆';
                 star.style.left = Math.random() * 100 + '%';
                 star.style.top = Math.random() * 100 + '%';
-                star.style.animationDelay = Math.random() * 3 + 's';
+                const size = 8 + Math.random() * 18;
+                star.style.fontSize = size + 'px';
+                star.style.opacity = 0.6 + Math.random() * 0.4;
+                star.style.animationDelay = (Math.random() * 3) + 's';
+                star.style.color = ['#ffffff', '#B30000', '#0B6623'][Math.floor(Math.random() * 3)];
                 container.appendChild(star);
             }
         }
 
+        // Create snow particle puffs with red & green accent puffs
         function createParticles() {
             const container = document.querySelector('.particles');
-            for(let i = 0; i < 20; i++) {
+            for (let i = 0; i < 24; i++) {
                 const particle = document.createElement('div');
                 particle.className = 'particle';
                 particle.style.left = Math.random() * 100 + '%';
+                particle.style.top = -Math.random() * 40 + 'vh';
                 particle.style.animationDelay = Math.random() * 15 + 's';
-                particle.style.backgroundColor = `hsl(${180 + Math.random() * 60}, 100%, 70%)`;
+                const colorOptions = ['#ffffff', '#B30000', '#0B6623'];
+                particle.style.backgroundColor = colorOptions[Math.floor(Math.random() * colorOptions.length)];
+                particle.style.opacity = 0.8 + Math.random() * 0.2;
+                particle.style.width = (4 + Math.round(Math.random() * 6)) + 'px';
+                particle.style.height = particle.style.width;
                 container.appendChild(particle);
             }
         }
+
         createStars();
         createParticles();
+
+        // Popup show-once logic
+        window.addEventListener('DOMContentLoaded', function() {
+            if (!localStorage.getItem('popupUpdateRead')) {
+                document.getElementById('popupUpdate').style.display = 'block';
+                document.getElementById('popupOverlay').style.display = 'block';
+            }
+            document.getElementById('popupCloseBtn').onclick = function() {
+                document.getElementById('popupUpdate').style.display = 'none';
+                document.getElementById('popupOverlay').style.display = 'none';
+                localStorage.setItem('popupUpdateRead', 'true');
+            };
+        });
     </script>
     <div class="light-sweep-3"></div>
     <div class="light-sweep-2"></div>
     <div class="light-sweep"></div>
     <div class="content">
         <h1 data-text="WELCOME TO WWWFC">WELCOME TO WWWFC</h1>
-        <p>Westin's Weather Wise Forecast Center</p>
+        <p>Westin's Weather Wise Forecast Center — Happy Holidays!</p>
+    </div>
+    <!-- Popup update box -->
+    <div class="popup-update" id="popupUpdate" style="display:none;">
+        <button class="popup-close" id="popupCloseBtn">&times;</button>
+        <strong>The website has been updated to a Christmas theme!</strong>
+        <br>
+        The update is about the lag on the radar page — <span style="color:#0B6623;font-weight:bold;">it has now been fixed 
+        to improve performance and reduce lagging issues. Enjoy the smoother experience!. And Happy Holidays!
+        </span>.
     </div>
 </body>
 </html>
